@@ -9,19 +9,20 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Todo struct {
-	ID        int    `json:"_id bson:"_id"`
-	Completed bool   `json:"completed"`
-	Body      string `json:"body"`
+	ID        primitive.ObjectID `json:"id, omitempty" bson:"_id"`
+	Completed bool               `json:"completed"`
+	Body      string             `json:"body"`
 }
 
 var collection *mongo.Collection
 
-func main(){
+func main() {
 	fmt.Println("API without DB")
 
 	err := godotenv.Load(".env")
@@ -51,7 +52,7 @@ func main(){
 	app := fiber.New()
 
 	app.Get("/api/todos", getTodos)
-	// app.Post("/api/todos", createTodos)
+	app.Post("/api/todos", createTodos)
 	// app.Patch("/api/todos/:id", updateTodos)
 	// app.Delete("/api/todos/:id", deleteTodos)
 
@@ -63,7 +64,6 @@ func main(){
 	log.Fatal(app.Listen("0.0.0.0:" + PORT))
 }
 
-
 func getTodos(c *fiber.Ctx) error {
 	var todos []Todo
 
@@ -73,11 +73,11 @@ func getTodos(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	
+
 	//defer is a keyword we use to postpone the execution of a function.
 	//it is an advancement feature
 	defer cursor.Close(context.Background())
-	
+
 	for cursor.Next(context.Background()) {
 		var todo Todo
 		if err := cursor.Decode(&todo); err != nil {
@@ -87,4 +87,26 @@ func getTodos(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(todos)
+}
+
+func createTodos(c *fiber.Ctx) error {
+	todo := new(Todo)
+
+	if err := c.BodyParser(todo); err != nil {
+		return err
+	}
+
+	if todo.Body == "" {
+		return c.Status(400).JSON(fiber.Map{"error": "Todo body is required"})
+	}
+
+	todo.ID = primitive.NewObjectID()
+
+	insertResult, err := collection.InsertOne(context.Background(), todo)
+	if err != nil {
+		return err
+	}
+
+	todo.ID = insertResult.InsertedID.(primitive.ObjectID)
+	return c.Status(201).JSON(todo)
 }
