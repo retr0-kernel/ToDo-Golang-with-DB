@@ -6,7 +6,9 @@ import (
 	"log"
 	"os"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/joho/godotenv"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -35,6 +37,8 @@ func main(){
 		log.Fatal(err)
 	}
 
+	defer client.Disconnect(context.Background())
+
 	err = client.Ping(context.Background(), nil)
 
 	if err != nil {
@@ -42,4 +46,45 @@ func main(){
 	}
 
 	fmt.Println("Connected to MongoDB Atlas")
+
+	collection = client.Database("golang_db").Collection("todos")
+	app := fiber.New()
+
+	app.Get("/api/todos", getTodos)
+	// app.Post("/api/todos", createTodos)
+	// app.Patch("/api/todos/:id", updateTodos)
+	// app.Delete("/api/todos/:id", deleteTodos)
+
+	PORT := os.Getenv("PORT")
+	if PORT == "" {
+		PORT = "4000"
+	}
+
+	log.Fatal(app.Listen("0.0.0.0:" + PORT))
+}
+
+
+func getTodos(c *fiber.Ctx) error {
+	var todos []Todo
+
+	//search cursor in context of MONGODB
+	cursor, err := collection.Find(context.Background(), bson.M{})
+
+	if err != nil {
+		return err
+	}
+	
+	//defer is a keyword we use to postpone the execution of a function.
+	//it is an advancement feature
+	defer cursor.Close(context.Background())
+	
+	for cursor.Next(context.Background()) {
+		var todo Todo
+		if err := cursor.Decode(&todo); err != nil {
+			return err
+		}
+		todos = append(todos, todo)
+	}
+
+	return c.JSON(todos)
 }
